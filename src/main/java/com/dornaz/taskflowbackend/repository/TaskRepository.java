@@ -10,9 +10,10 @@ import java.util.Optional;
 
 public interface TaskRepository extends JpaRepository<Task, Long> {
 
-    // ✅ pagination + sorting support
+    // ✅ for pagination + sorting
     Page<Task> findByProject(Project project, Pageable pageable);
 
+    // ✅ optional: useful for secure lookups
     Optional<Task> findByIdAndProject(Long id, Project project);
 
     void deleteByIdAndProject(Long id, Project project);

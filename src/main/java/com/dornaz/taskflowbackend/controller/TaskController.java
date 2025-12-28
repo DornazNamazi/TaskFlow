@@ -144,6 +144,7 @@ public class TaskController {
 
         ensureProjectBelongsToUser(project, currentUser);
 
+        // ✅ direction safe
         Sort.Direction dir;
         try {
             dir = Sort.Direction.fromString(direction);
@@ -151,11 +152,23 @@ public class TaskController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "direction must be asc or desc");
         }
 
-        Pageable pageable = PageRequest.of(
-                Math.max(page, 0),
-                Math.min(Math.max(size, 1), 50), // limit size 1..50
-                Sort.by(dir, sortBy)
-        );
+        // ✅ sortBy safe (prevents 500)
+        String mappedSort = switch (sortBy) {
+            case "createdAt" -> "createdAt";
+            case "dueDate" -> "dueDate";
+            case "title" -> "title";
+            case "status" -> "status";      // enum field is fine
+            case "priority" -> "priority";  // MUST match Task field name EXACTLY
+            default -> throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid sortBy. Allowed: createdAt, dueDate, title, status, priority"
+            );
+        };
+
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(dir, mappedSort));
 
         Page<Task> taskPage = taskRepository.findByProject(project, pageable);
 
@@ -175,6 +188,7 @@ public class TaskController {
 
         return ResponseEntity.ok(response);
     }
+
 
     @GetMapping("/tasks/{id}")
     public ResponseEntity<TaskResponse> getTaskById(
