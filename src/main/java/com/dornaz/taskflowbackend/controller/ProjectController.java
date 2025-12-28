@@ -1,5 +1,6 @@
 package com.dornaz.taskflowbackend.controller;
 
+import com.dornaz.taskflowbackend.dto.common.PagedResponse;
 import com.dornaz.taskflowbackend.dto.project.ProjectRequest;
 import com.dornaz.taskflowbackend.dto.project.ProjectResponse;
 import com.dornaz.taskflowbackend.model.Project;
@@ -8,6 +9,7 @@ import com.dornaz.taskflowbackend.model.User;
 import com.dornaz.taskflowbackend.repository.ProjectRepository;
 import com.dornaz.taskflowbackend.repository.UserRepository;
 import com.dornaz.taskflowbackend.security.CustomUserDetails;
+import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -15,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -100,17 +101,47 @@ public class ProjectController {
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
     }
 
+    // ✅ UPDATED: pagination + sorting (like your TaskController)
     @GetMapping
-    public ResponseEntity<List<ProjectResponse>> getMyProjects(Authentication authentication) {
+    public ResponseEntity<PagedResponse<ProjectResponse>> getMyProjects(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction,
+            Authentication authentication
+    ) {
         User currentUser = getCurrentUser(authentication);
 
-        List<Project> projects = projectRepository.findByOwner(currentUser);
+        Sort.Direction dir;
+        try {
+            dir = Sort.Direction.fromString(direction);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "direction must be asc or desc");
+        }
 
-        List<ProjectResponse> responseList = projects.stream()
+        Pageable pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.min(Math.max(size, 1), 50),
+                Sort.by(dir, sortBy)
+        );
+
+        Page<Project> projectPage = projectRepository.findByOwner(currentUser, pageable);
+
+        List<ProjectResponse> content = projectPage.getContent()
+                .stream()
                 .map(this::toResponse)
-                .collect(Collectors.toList());
+                .toList();
 
-        return ResponseEntity.ok(responseList);
+        PagedResponse<ProjectResponse> response = new PagedResponse<>(
+                content,
+                projectPage.getNumber(),
+                projectPage.getSize(),
+                projectPage.getTotalElements(),
+                projectPage.getTotalPages(),
+                projectPage.isLast()
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}")
